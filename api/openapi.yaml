@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info: {title: Seismic Event Associator API, version: 1.0.0}
+servers: [{url: http://127.0.0.1:18336}]
+security: [{ApiKey: []}]
+paths:
+  /healthz: {get: {security: [], responses: {'200': {description: Healthy}}}}
+  /readyz: {get: {security: [], responses: {'200': {description: Ready}}}}
+  /metrics: {get: {security: [], responses: {'200': {description: Prometheus metrics}}}}
+  /v1/stations:
+    get: {responses: {'200': {description: Station catalog}}}
+    post: {requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Station'}}}}, responses: {'201': {description: Station version stored}}}
+  /v1/waveforms:
+    post: {description: Ingest JSON samples or base64 miniSEED2 record and calculate picks, responses: {'201': {description: Picks}, '400': {description: Invalid record}, '422': {description: Processing rejected}}}
+  /v1/associations:
+    post: {description: Locate an event by travel-time grid search, responses: {'201': {description: Versioned event}, '422': {description: Insufficient consistent picks}}}
+  /v1/picks: {get: {parameters: [{in: query, name: from, schema: {type: string, format: date-time}}, {in: query, name: to, schema: {type: string, format: date-time}}], responses: {'200': {description: Picks and evidence}}}}
+  /v1/events: {get: {responses: {'200': {description: Event candidates}}}}
+  /v1/events/{id}: {get: {parameters: [{in: path, name: id, required: true, schema: {type: string}}], responses: {'200': {description: Event}, '404': {description: Missing}}}}
+  /v1/evidence/{subject}: {get: {parameters: [{in: path, name: subject, required: true, schema: {type: string}}], responses: {'200': {description: Reproducibility evidence}}}}
+components:
+  securitySchemes: {ApiKey: {type: apiKey, in: header, name: X-API-Key}}
+  schemas:
+    Station:
+      type: object
+      required: [network, code, latitude, longitude, version, valid_from]
+      properties: {network: {type: string}, code: {type: string}, latitude: {type: number}, longitude: {type: number}, elevation_m: {type: number}, enabled: {type: boolean}, version: {type: integer}, valid_from: {type: string, format: date-time}}
+

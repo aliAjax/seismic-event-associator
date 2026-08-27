@@ -1,0 +1,8 @@
+address: ":18336"
+api_key: "seismic-dev"
+node_id: "seismic-node-1"
+timeout: "10s"
+max_body: 33554432
+rate_limit: 100
+log_level: "info"
+
