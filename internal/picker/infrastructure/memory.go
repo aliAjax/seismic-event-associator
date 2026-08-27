@@ -9,22 +9,30 @@ import (
 )
 
 type Repository struct {
-	mu       sync.RWMutex
-	items    map[string]picker.PickWithEvidence
-	snapshot []picker.PickWithEvidence
+	mu    sync.RWMutex
+	items map[string]picker.PickWithEvidence
+	// order preserves the insertion order of pick IDs so List returns a stable,
+	// time-sorted view without relying on map iteration.
+	order []string
 }
 
-func NewRepository() *Repository { return &Repository{items: map[string]picker.PickWithEvidence{}} }
+func NewRepository() *Repository {
+	return &Repository{items: map[string]picker.PickWithEvidence{}}
+}
+
 func (r *Repository) Save(ctx context.Context, p picker.PickWithEvidence) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.items[p.Pick.ID]; !exists {
+		r.order = append(r.order, p.Pick.ID)
+	}
 	r.items[p.Pick.ID] = p
-	r.snapshot = append(r.snapshot, p)
 	return nil
 }
+
 func (r *Repository) Get(ctx context.Context, id string) (picker.PickWithEvidence, error) {
 	if err := ctx.Err(); err != nil {
 		return picker.PickWithEvidence{}, err
@@ -37,21 +45,37 @@ func (r *Repository) Get(ctx context.Context, id string) (picker.PickWithEvidenc
 	}
 	return p, nil
 }
+
+// inWindow reports whether t falls inside the [from, to) half-open window. A
+// zero from/to disables the respective bound.
+func inWindow(t, from, to time.Time) bool {
+	if !from.IsZero() && t.Before(from) {
+		return false
+	}
+	if !to.IsZero() && !t.Before(to) {
+		return false
+	}
+	return true
+}
+
 func (r *Repository) List(ctx context.Context, from, to time.Time) ([]picker.PickWithEvidence, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
-	out := r.snapshot
-	r.mu.RUnlock()
-	for _, p := range out {
-		if (from.IsZero() || !p.Pick.Time.Before(from)) && (to.IsZero() || p.Pick.Time.Before(to)) {
+	out := make([]picker.PickWithEvidence, 0, len(r.order))
+	for _, id := range r.order {
+		p := r.items[id]
+		if !inWindow(p.Pick.Time, from, to) {
 			continue
 		}
+		out = append(out, p)
 	}
+	r.mu.RUnlock()
 	sort.Slice(out, func(i, j int) bool { return out[i].Pick.Time.Before(out[j].Pick.Time) })
 	return out, nil
 }
+
 func (r *Repository) UpdateStatus(ctx context.Context, id, status string) error {
 	if err := ctx.Err(); err != nil {
 		return err
