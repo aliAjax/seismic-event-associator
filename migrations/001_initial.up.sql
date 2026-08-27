@@ -1,0 +1,12 @@
+CREATE TABLE station_versions (network TEXT NOT NULL, code TEXT NOT NULL, version BIGINT NOT NULL, latitude DOUBLE PRECISION NOT NULL, longitude DOUBLE PRECISION NOT NULL, elevation_m DOUBLE PRECISION NOT NULL, enabled BOOLEAN NOT NULL, valid_from TIMESTAMPTZ NOT NULL, valid_to TIMESTAMPTZ, PRIMARY KEY(network, code, version));
+CREATE INDEX station_versions_validity_idx ON station_versions(network, code, valid_from, valid_to);
+CREATE TABLE processing_jobs (id TEXT PRIMARY KEY, job_type TEXT NOT NULL, status TEXT NOT NULL, priority INTEGER NOT NULL, attempt INTEGER NOT NULL, max_attempts INTEGER NOT NULL, owner TEXT, lease_until TIMESTAMPTZ, progress DOUBLE PRECISION NOT NULL, input_digest TEXT NOT NULL, result_id TEXT, error TEXT, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX processing_jobs_claim_idx ON processing_jobs(status, priority DESC, created_at) WHERE status IN ('queued','running');
+CREATE TABLE picks (id TEXT PRIMARY KEY, station_id TEXT NOT NULL, channel_id TEXT NOT NULL, phase TEXT NOT NULL, observed_at TIMESTAMPTZ NOT NULL, uncertainty_ms DOUBLE PRECISION NOT NULL, amplitude DOUBLE PRECISION NOT NULL, snr DOUBLE PRECISION NOT NULL, algorithm_version TEXT NOT NULL, parameter_version TEXT NOT NULL, record_digest TEXT NOT NULL, status TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX picks_time_station_idx ON picks(observed_at, station_id);
+CREATE TABLE event_versions (event_id TEXT NOT NULL, version BIGINT NOT NULL, origin_at TIMESTAMPTZ NOT NULL, latitude DOUBLE PRECISION NOT NULL, longitude DOUBLE PRECISION NOT NULL, depth_km DOUBLE PRECISION NOT NULL, rms_residual_ms DOUBLE PRECISION NOT NULL, confidence DOUBLE PRECISION NOT NULL, status TEXT NOT NULL, magnitude DOUBLE PRECISION, document JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL, PRIMARY KEY(event_id, version));
+CREATE INDEX event_versions_origin_idx ON event_versions(origin_at DESC);
+CREATE TABLE evidence_index (id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject_id TEXT NOT NULL, algorithm_version TEXT NOT NULL, input_digests JSONB NOT NULL, parameters JSONB NOT NULL, payload_ref TEXT, created_at TIMESTAMPTZ NOT NULL);
+CREATE INDEX evidence_subject_idx ON evidence_index(subject_id, created_at);
+CREATE TABLE waveform_objects (record_digest TEXT PRIMARY KEY, object_key TEXT NOT NULL UNIQUE, byte_size BIGINT NOT NULL CHECK(byte_size > 0), station_id TEXT NOT NULL, channel_id TEXT NOT NULL, start_at TIMESTAMPTZ NOT NULL, end_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL);
+
