@@ -1,0 +1,14 @@
+syntax = "proto3";
+package seismic.v1;
+option go_package = "github.com/enterprise-labs/seismic-event-associator/api/seismicv1";
+service SeismicService { rpc Ingest(stream WaveformRecord) returns (IngestResult); rpc Associate(AssociationRequest) returns (Event); rpc ListPicks(TimeRange) returns (PickList); rpc ListEvents(Empty) returns (EventList); }
+message Empty {}
+message TimeRange { int64 from_unix_nano = 1; int64 to_unix_nano = 2; }
+message WaveformRecord { bytes miniseed = 1; string source = 2; }
+message IngestResult { repeated Pick picks = 1; }
+message Pick { string id = 1; string station_id = 2; string phase = 3; int64 time_unix_nano = 4; double amplitude = 5; double snr = 6; }
+message AssociationRequest { TimeRange range = 1; int32 min_stations = 2; double max_residual_ms = 3; }
+message Event { string id = 1; int64 version = 2; int64 origin_unix_nano = 3; double latitude = 4; double longitude = 5; double depth_km = 6; double confidence = 7; double magnitude = 8; repeated Pick picks = 9; }
+message PickList { repeated Pick picks = 1; }
+message EventList { repeated Event events = 1; }
+
