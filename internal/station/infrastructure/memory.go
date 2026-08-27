@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"fmt"
 	station "github.com/enterprise-labs/seismic-event-associator/internal/station/domain"
 	"sync"
 	"time"
@@ -28,11 +27,11 @@ func (r *Repository) Get(ctx context.Context, id string, at time.Time) (station.
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	s, ok := r.catalog.Get(id, at)
-	if !ok {
-		return s, fmt.Errorf("station %s unavailable", id)
+	result := r.catalog.Lookup(id, at)
+	if err := result.Err(id); err != nil {
+		return station.Station{}, err
 	}
-	return s, nil
+	return result.Station, nil
 }
 func (r *Repository) List(ctx context.Context) ([]station.Station, error) {
 	if err := ctx.Err(); err != nil {

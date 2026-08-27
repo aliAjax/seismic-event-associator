@@ -9,7 +9,69 @@ import (
 )
 
 var ErrInvalidStation = errors.New("invalid station")
+
+// ErrStationNotFound is the sentinel upper layers branch on to distinguish
+// "the station cannot be used for this request" (a data problem) from genuine
+// service failures (which should be alerted on). Every unavailable-station
+// cause below wraps it, so errors.Is(err, ErrStationNotFound) is true for all
+// four cases while the wrapping variant lets callers tell them apart.
 var ErrStationNotFound = errors.New("station not found")
+
+var (
+	// ErrStationMissing: no catalog entry exists for the requested id.
+	ErrStationMissing = fmt.Errorf("%w: station missing", ErrStationNotFound)
+	// ErrStationDisabled: the entry exists but is administratively disabled.
+	ErrStationDisabled = fmt.Errorf("%w: station disabled", ErrStationNotFound)
+	// ErrStationNotYetValid: the entry's ValidFrom is in the future relative to at.
+	ErrStationNotYetValid = fmt.Errorf("%w: station not_yet_valid", ErrStationNotFound)
+	// ErrStationExpired: the entry's ValidTo is non-nil and at is not before it.
+	ErrStationExpired = fmt.Errorf("%w: station expired", ErrStationNotFound)
+)
+
+// LookupStatus reports why a station lookup did (or did not) resolve.
+type LookupStatus int
+
+const (
+	LookupFound LookupStatus = iota
+	LookupMissing
+	LookupDisabled
+	LookupNotYetValid
+	LookupExpired
+)
+
+// LookupResult is the structured outcome of a catalog lookup at a point in time.
+type LookupResult struct {
+	Station Station
+	Status  LookupStatus
+}
+
+// unavailableFor maps a non- LookupFound status to its sentinel cause error, or
+// nil for LookupFound. Each cause wraps ErrStationNotFound and carries one of
+// the missing/disabled/not_yet_valid/expired markers in its text.
+func (s LookupStatus) cause() error {
+	switch s {
+	case LookupMissing:
+		return ErrStationMissing
+	case LookupDisabled:
+		return ErrStationDisabled
+	case LookupNotYetValid:
+		return ErrStationNotYetValid
+	case LookupExpired:
+		return ErrStationExpired
+	default:
+		return nil
+	}
+}
+
+// Err turns a non-found LookupResult into an error that wraps the matching
+// sentinel (and therefore ErrStationNotFound), including the station id and the
+// cause's marker word. Returns nil when the lookup succeeded.
+func (r LookupResult) Err(id string) error {
+	if r.Status == LookupFound {
+		return nil
+	}
+	return fmt.Errorf("station %s unavailable: %w", id, r.Status.cause())
+}
 
 type Station struct {
 	Code      string     `json:"code"`
@@ -57,10 +119,31 @@ func (c *Catalog) Upsert(s Station) error {
 	c.UpdatedAt = time.Now()
 	return nil
 }
-func (c Catalog) Get(id string, at time.Time) (Station, bool) {
+// Lookup resolves a station by id at the given instant, reporting which of the
+// five outcomes occurred (found, missing, disabled, not_yet_valid, expired).
+// The order of checks matters: a missing entry short-circuits before validity
+// is considered, so an absent id is reported as missing even when it would also
+// be out of its validity window had it existed.
+func (c Catalog) Lookup(id string, at time.Time) LookupResult {
 	s, ok := c.Stations[id]
-	if !ok || !s.Enabled || at.Before(s.ValidFrom) || (s.ValidTo != nil && !at.Before(*s.ValidTo)) {
-		return Station{}, false
+	if !ok {
+		return LookupResult{Status: LookupMissing}
 	}
-	return s, true
+	if !s.Enabled {
+		return LookupResult{Status: LookupDisabled}
+	}
+	if at.Before(s.ValidFrom) {
+		return LookupResult{Status: LookupNotYetValid}
+	}
+	if s.ValidTo != nil && !at.Before(*s.ValidTo) {
+		return LookupResult{Status: LookupExpired}
+	}
+	return LookupResult{Station: s, Status: LookupFound}
+}
+
+// Get reports whether a station is usable at the given time. It is retained as
+// a convenience over Lookup for callers that only need the found/not-found bit.
+func (c Catalog) Get(id string, at time.Time) (Station, bool) {
+	r := c.Lookup(id, at)
+	return r.Station, r.Status == LookupFound
 }
