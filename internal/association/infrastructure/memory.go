@@ -30,6 +30,9 @@ func (r *Repository) Save(ctx context.Context, e assoc.Event) error {
 	if exists && e.Version <= current.Version {
 		return fmt.Errorf("event version %d is not newer than %d", e.Version, current.Version)
 	}
+	if exists && !current.Status.Active() && e.Status.Active() {
+		return fmt.Errorf("cannot revive event %s from terminal status %s to active status %s", e.ID, current.Status, e.Status)
+	}
 	r.events[e.ID] = e
 	r.history[e.ID] = append(r.history[e.ID], e)
 	return nil
@@ -78,7 +81,7 @@ func (r *Repository) LatestNear(ctx context.Context, origin time.Time, p travel.
 	}
 	for i := len(items) - 1; i >= 0; i-- {
 		e := items[i]
-		if e.Status == assoc.Revoked || e.Status == assoc.Merged {
+		if !e.Status.Active() {
 			continue
 		}
 		if absDuration(e.OriginTime.Sub(origin)) <= window && travelapp.GreatCircleKM(e.Hypocenter.Latitude, e.Hypocenter.Longitude, p.Latitude, p.Longitude) <= distance {

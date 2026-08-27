@@ -20,6 +20,20 @@ const (
 	Revoked   Status = "revoked"
 )
 
+// Active reports whether a status represents a live event that may still be
+// operated on by association, merge or split. Terminal statuses (split,
+// merged, revoked) must never re-enter the active result set: a split child is
+// superseded, a merged event is folded into another, and a revoked event has
+// been invalidated.
+func (s Status) Active() bool {
+	switch s {
+	case Candidate, Confirmed:
+		return true
+	default:
+		return false
+	}
+}
+
 type AssociatedPick struct {
 	PickID     string    `json:"pick_id"`
 	StationID  string    `json:"station_id"`

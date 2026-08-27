@@ -36,6 +36,9 @@ func (l *Lifecycle) Split(ctx context.Context, id string) ([]assoc.Event, error)
 	if err != nil {
 		return nil, err
 	}
+	if !event.Status.Active() {
+		return nil, fmt.Errorf("cannot split event in terminal status %s", event.Status)
+	}
 	if len(event.Picks) < 6 {
 		return nil, fmt.Errorf("event needs at least six picks to split")
 	}
@@ -80,6 +83,9 @@ func (l *Lifecycle) Merge(ctx context.Context, ids []string) (assoc.Event, error
 		e, err := l.events.Get(ctx, id)
 		if err != nil {
 			return assoc.Event{}, err
+		}
+		if !e.Status.Active() {
+			return assoc.Event{}, fmt.Errorf("event %s is in terminal status %s and cannot be merged", e.ID, e.Status)
 		}
 		events = append(events, e)
 	}
