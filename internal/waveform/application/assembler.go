@@ -21,7 +21,8 @@ func (a *Assembler) Assemble(blocks []waveform.SampleBlock) ([]waveform.Stream, 
 	if len(blocks) == 0 {
 		return nil, fmt.Errorf("no waveform blocks")
 	}
-	items := blocks
+	items := make([]waveform.SampleBlock, len(blocks))
+	copy(items, blocks)
 	waveform.SortBlocks(items)
 	groups := map[string][]waveform.SampleBlock{}
 	order := []string{}
@@ -45,7 +46,7 @@ func (a *Assembler) Assemble(blocks []waveform.SampleBlock) ([]waveform.Stream, 
 				return nil, fmt.Errorf("sample rate changed for %s", key)
 			}
 			if current.Blocks == 0 {
-				current.Samples = part.Samples
+				current.Samples = append([]float64(nil), part.Samples...)
 				current.Blocks = 1
 				continue
 			}

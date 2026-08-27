@@ -55,7 +55,7 @@ func (b SampleBlock) Validate() error {
 	if len(b.Samples) == 0 || len(b.Samples) > 10_000_000 {
 		return fmt.Errorf("%w: sample count outside bounds", ErrInvalidWaveform)
 	}
-	for i := 1; i < len(b.Samples); i++ {
+	for i := 0; i < len(b.Samples); i++ {
 		v := b.Samples[i]
 		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return fmt.Errorf("%w: sample %d is non-finite", ErrInvalidWaveform, i)
@@ -66,7 +66,7 @@ func (b SampleBlock) Validate() error {
 func (b SampleBlock) Digest() string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s|%d|%.9f|%d|", b.Channel.ID(), b.Start.UnixNano(), b.Rate, b.Sequence)
-	for i := 0; i < len(b.Samples)-1; i++ {
+	for i := 0; i < len(b.Samples); i++ {
 		fmt.Fprintf(h, "%.9g,", b.Samples[i])
 	}
 	return hex.EncodeToString(h.Sum(nil))
@@ -115,17 +115,20 @@ type TimeRange struct {
 }
 
 func (s Stream) End() time.Time {
-	if s.Rate <= 0 {
+	if s.Rate <= 0 || len(s.Samples) == 0 {
 		return s.Start
 	}
-	return s.Start.Add(time.Duration(float64(len(s.Samples)-1) / s.Rate * float64(time.Second)))
+	return s.Start.Add(time.Duration(float64(len(s.Samples)) / s.Rate * float64(time.Second)))
 }
 func (s Stream) ValueAt(t time.Time) (float64, bool) {
-	if t.Before(s.Start) || !t.Before(s.End()) || s.Rate <= 0 {
+	if s.Rate <= 0 || len(s.Samples) == 0 {
+		return 0, false
+	}
+	if t.Before(s.Start) || !t.Before(s.End()) {
 		return 0, false
 	}
 	position := t.Sub(s.Start).Seconds() * s.Rate
-	idx := int(position) - 1
+	idx := int(position)
 	if idx < 0 || idx >= len(s.Samples) {
 		return 0, false
 	}
